@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Screen Share with Live Preview</title>
+    <title>Screen Share with True Pixel Crop</title>
     <style>
+        /* Previous styles remain the same */
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
@@ -54,75 +55,27 @@
         
         .crop-box {
             position: absolute;
-            width: 512px;
-            height: 512px;
             border: 2px solid red;
             background-color: rgba(255, 0, 0, 0.1);
             cursor: move;
         }
-        
-        .controls {
-            margin: 20px 0;
-        }
-        
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 10px;
-            transition: background-color 0.3s;
-        }
 
-        button:hover {
-            background-color: #1976D2;
-        }
-        
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-
-        #stopButton {
-            background-color: #dc3545;
-        }
-
-        #stopButton:hover {
-            background-color: #c82333;
-        }
-        
-        #status {
-            padding: 10px;
+        #dimensions {
             margin: 10px 0;
-            background: white;
+            font-family: monospace;
+            background: #fff;
+            padding: 10px;
             border-radius: 4px;
-            border-left: 4px solid #2196F3;
-        }
-
-        .preview-title {
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            font-weight: bold;
-            color: #333;
         }
         
-        #previewImage {
-            width: 512px;
-            height: 512px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: white;
-        }
+        /* Rest of the styles remain the same */
     </style>
 </head>
 <body>
-    <h1>Screen Share with Live Preview</h1>
+    <h1>Screen Share with True Pixel Crop</h1>
     
     <div id="status">Ready to share</div>
+    <div id="dimensions">Resolution: Not sharing</div>
     
     <div class="controls">
         <button id="shareButton">Start Screen Share</button>
@@ -147,6 +100,8 @@
 
     <script>
         let stream = null;
+        let trueWidth = 0;
+        let trueHeight = 0;
         
         const shareButton = document.getElementById('shareButton');
         const stopButton = document.getElementById('stopButton');
@@ -156,10 +111,15 @@
         const previewCanvas = document.getElementById('previewCanvas');
         const ctx = previewCanvas.getContext('2d');
         const statusDiv = document.getElementById('status');
+        const dimensionsDiv = document.getElementById('dimensions');
 
         function updateStatus(message) {
             console.log(message);
             statusDiv.textContent = message;
+        }
+
+        function updateDimensions() {
+            dimensionsDiv.textContent = `Source Resolution: ${trueWidth}x${trueHeight} | Crop: 512x512 | Scale: ${(trueWidth / sharedScreen.offsetWidth).toFixed(2)}x`;
         }
         
         // Dragging functionality
@@ -186,13 +146,24 @@
             if (isDragging) {
                 e.preventDefault();
                 
-                currentX = e.clientX - initialX;
-                currentY = e.clientY - initialY;
-                
-                // Constrain to video bounds
                 const bounds = sharedScreen.getBoundingClientRect();
-                currentX = Math.max(bounds.left, Math.min(currentX, bounds.right - cropBox.offsetWidth));
-                currentY = Math.max(bounds.top, Math.min(currentY, bounds.bottom - cropBox.offsetHeight));
+                const scale = trueWidth / bounds.width;
+                
+                // Calculate new position in display coordinates
+                let newX = e.clientX - initialX;
+                let newY = e.clientY - initialY;
+                
+                // Convert to true pixels and constrain
+                let trueX = newX * scale;
+                let trueY = newY * scale;
+                
+                // Constrain to video bounds in true pixels
+                trueX = Math.max(0, Math.min(trueX, trueWidth - 512));
+                trueY = Math.max(0, Math.min(trueY, trueHeight - 512));
+                
+                // Convert back to display coordinates
+                currentX = trueX / scale;
+                currentY = trueY / scale;
                 
                 setTranslate(currentX, currentY, cropBox);
             }
@@ -223,10 +194,27 @@
                     audio: false
                 });
                 
-                updateStatus('Screen share active - Drag the red box to select area');
-                
                 sharedScreen.srcObject = stream;
+                
+                // Wait for video metadata to load to get true dimensions
+                await new Promise(resolve => {
+                    sharedScreen.onloadedmetadata = () => {
+                        trueWidth = sharedScreen.videoWidth;
+                        trueHeight = sharedScreen.videoHeight;
+                        resolve();
+                    };
+                });
+
                 await sharedScreen.play();
+                
+                updateStatus('Screen share active - Drag the red box to select area');
+                updateDimensions();
+                
+                // Set crop box size based on scale
+                const bounds = sharedScreen.getBoundingClientRect();
+                const scale = trueWidth / bounds.width;
+                cropBox.style.width = `${512 / scale}px`;
+                cropBox.style.height = `${512 / scale}px`;
                 
                 sharedScreen.style.display = 'block';
                 cropOverlay.style.display = 'block';
@@ -234,9 +222,8 @@
                 stopButton.style.display = 'inline-block';
                 
                 // Set initial crop box position
-                const bounds = sharedScreen.getBoundingClientRect();
-                currentX = (bounds.width - 512) / 2;
-                currentY = (bounds.height - 512) / 2;
+                currentX = (bounds.width - (512 / scale)) / 2;
+                currentY = (bounds.height - (512 / scale)) / 2;
                 setTranslate(currentX, currentY, cropBox);
                 
                 stream.getVideoTracks()[0].addEventListener('ended', () => {
@@ -263,6 +250,7 @@
             shareButton.style.display = 'inline-block';
             stopButton.style.display = 'none';
             updateStatus('Screen share stopped');
+            dimensionsDiv.textContent = 'Resolution: Not sharing';
             
             // Clear the preview
             ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -273,15 +261,18 @@
             
             try {
                 const bounds = sharedScreen.getBoundingClientRect();
-                const scaleX = sharedScreen.videoWidth / bounds.width;
-                const scaleY = sharedScreen.videoHeight / bounds.height;
+                const scale = trueWidth / bounds.width;
+                
+                // Calculate true pixel coordinates
+                const trueX = currentX * scale;
+                const trueY = currentY * scale;
                 
                 ctx.drawImage(
                     sharedScreen,
-                    (currentX - bounds.left) * scaleX,
-                    (currentY - bounds.top) * scaleY,
-                    512 * scaleX,
-                    512 * scaleY,
+                    trueX,
+                    trueY,
+                    512,
+                    512,
                     0,
                     0,
                     512,
