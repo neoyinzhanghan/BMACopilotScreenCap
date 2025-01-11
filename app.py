@@ -8,9 +8,5 @@ socketio = SocketIO(app)
 def index():
     return render_template('index.html')
 
-@app.route('/preview')
-def preview():
-    return render_template('preview.html')
-
 if __name__ == '__main__':
     socketio.run(app, debug=True)

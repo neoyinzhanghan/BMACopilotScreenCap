@@ -1,52 +1,160 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Screen Share with Live Crop</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:">
+    <title>Screen Share with Live Preview</title>
     <style>
-        /* ... (keeping the same styles) ... */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .main-screen {
+            flex: 2;
+        }
+
+        .preview-pane {
+            flex: 1;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .screen-container {
+            position: relative;
+            margin: 20px 0;
+            display: inline-block;
+            background: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        #sharedScreen {
+            max-width: 100%;
+            display: none;
+            border-radius: 4px;
+        }
+        
+        .crop-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            display: none;
+        }
+        
+        .crop-box {
+            position: absolute;
+            width: 512px;
+            height: 512px;
+            border: 2px solid red;
+            background-color: rgba(255, 0, 0, 0.1);
+            cursor: move;
+        }
+        
+        .controls {
+            margin: 20px 0;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #1976D2;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #stopButton {
+            background-color: #dc3545;
+        }
+
+        #stopButton:hover {
+            background-color: #c82333;
+        }
+        
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            background: white;
+            border-radius: 4px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .preview-title {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        #previewImage {
+            width: 512px;
+            height: 512px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
+        }
     </style>
 </head>
 <body>
-    <h1>Screen Share with Live Crop</h1>
+    <h1>Screen Share with Live Preview</h1>
     
-    <div id="status" style="padding: 10px; margin: 10px 0; background: #f0f0f0;"></div>
-    
-    <div class="instructions">
-        <h3>How to use:</h3>
-        <ol>
-            <li>Click "Start Screen Share" to share your screen</li>
-            <li>A new window will open showing the live crop preview</li>
-            <li>Drag the red box to select the 512x512 region you want to show</li>
-            <li>The preview window will update in real-time</li>
-        </ol>
-    </div>
+    <div id="status">Ready to share</div>
     
     <div class="controls">
         <button id="shareButton">Start Screen Share</button>
         <button id="stopButton" style="display: none;">Stop Sharing</button>
     </div>
-    
-    <div class="screen-container">
-        <video id="sharedScreen" autoplay playsinline></video>
-        <div class="crop-overlay">
-            <div class="crop-box"></div>
+
+    <div class="container">
+        <div class="main-screen">
+            <div class="screen-container">
+                <video id="sharedScreen" autoplay playsinline></video>
+                <div class="crop-overlay">
+                    <div class="crop-box"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="preview-pane">
+            <div class="preview-title">Live Preview (512x512)</div>
+            <canvas id="previewCanvas" width="512" height="512"></canvas>
         </div>
     </div>
-    
-    <canvas id="cropCanvas" width="512" height="512"></canvas>
 
     <script>
         let stream = null;
-        let previewWindow = null;
         
         const shareButton = document.getElementById('shareButton');
         const stopButton = document.getElementById('stopButton');
         const sharedScreen = document.getElementById('sharedScreen');
         const cropOverlay = document.querySelector('.crop-overlay');
         const cropBox = document.querySelector('.crop-box');
-        const cropCanvas = document.getElementById('cropCanvas');
-        const ctx = cropCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const ctx = previewCanvas.getContext('2d');
         const statusDiv = document.getElementById('status');
 
         function updateStatus(message) {
@@ -103,12 +211,10 @@
         async function startScreenShare() {
             updateStatus('Requesting screen share permissions...');
             try {
-                // First check if getDisplayMedia is supported
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
                     throw new Error('Screen sharing is not supported in this browser');
                 }
 
-                // Request screen sharing with specific constraints
                 stream = await navigator.mediaDevices.getDisplayMedia({
                     video: {
                         cursor: "always",
@@ -117,9 +223,8 @@
                     audio: false
                 });
                 
-                updateStatus('Screen share started successfully');
+                updateStatus('Screen share active - Drag the red box to select area');
                 
-                // Set up video element
                 sharedScreen.srcObject = stream;
                 await sharedScreen.play();
                 
@@ -134,22 +239,12 @@
                 currentY = (bounds.height - 512) / 2;
                 setTranslate(currentX, currentY, cropBox);
                 
-                // Handle stream ending
                 stream.getVideoTracks()[0].addEventListener('ended', () => {
                     updateStatus('Screen share stopped by user');
                     stopSharing();
                 });
                 
-                // Open preview window
-                if (!previewWindow || previewWindow.closed) {
-                    previewWindow = window.open('/preview', 'preview', 'width=532,height=532');
-                    if (!previewWindow) {
-                        throw new Error('Pop-up blocked. Please allow pop-ups for this site.');
-                    }
-                }
-                
-                // Start the crop preview loop
-                requestAnimationFrame(updateCrop);
+                requestAnimationFrame(updatePreview);
                 
             } catch (err) {
                 updateStatus(`Error: ${err.message}`);
@@ -162,21 +257,19 @@
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
             }
-            if (previewWindow && !previewWindow.closed) {
-                previewWindow.close();
-            }
             sharedScreen.srcObject = null;
             sharedScreen.style.display = 'none';
             cropOverlay.style.display = 'none';
             shareButton.style.display = 'inline-block';
             stopButton.style.display = 'none';
             updateStatus('Screen share stopped');
+            
+            // Clear the preview
+            ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         }
         
-        function updateCrop() {
-            if (!stream || !previewWindow || previewWindow.closed) {
-                return;
-            }
+        function updatePreview() {
+            if (!stream) return;
             
             try {
                 const bounds = sharedScreen.getBoundingClientRect();
@@ -195,30 +288,14 @@
                     512
                 );
                 
-                // Send the cropped image to preview window
-                previewWindow.postMessage({
-                    type: 'crop-update',
-                    image: cropCanvas.toDataURL('image/jpeg', 0.7)
-                }, '*');
-                
-                requestAnimationFrame(updateCrop);
+                requestAnimationFrame(updatePreview);
             } catch (error) {
-                console.error('Error in updateCrop:', error);
+                console.error('Error in updatePreview:', error);
             }
         }
         
         shareButton.addEventListener('click', startScreenShare);
         stopButton.addEventListener('click', stopSharing);
-        
-        // Clean up when the window is closed
-        window.addEventListener('beforeunload', () => {
-            if (previewWindow && !previewWindow.closed) {
-                previewWindow.close();
-            }
-        });
-
-        // Initial status
-        updateStatus('Ready to share. Click the Start Screen Share button.');
     </script>
 </body>
 </html>
