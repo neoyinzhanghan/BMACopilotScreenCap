@@ -260,20 +260,28 @@
                 const bounds = sharedScreen.getBoundingClientRect();
                 const scale = trueWidth / bounds.width;
                 
-                const boxBounds = cropBox.getBoundingClientRect();
-                const overlayBounds = cropOverlay.getBoundingClientRect();
+                // Get the actual crop coordinates in display space
+                const left = Math.min(startX, currentX);
+                const top = Math.min(startY, currentY);
+                const width = Math.abs(currentX - startX);
+                const height = Math.abs(currentY - startY);
                 
-                const trueX = (boxBounds.left - overlayBounds.left) * scale;
-                const trueY = (boxBounds.top - overlayBounds.top) * scale;
-                const trueWidth = boxBounds.width * scale;
-                const trueHeight = boxBounds.height * scale;
+                // Convert to true pixel coordinates
+                const trueX = left * scale;
+                const trueY = top * scale;
+                const trueBoxWidth = width * scale;
+                const trueBoxHeight = height * scale;
+                
+                // Clear the canvas and set its size to match the crop box
+                previewCanvas.width = trueBoxWidth;
+                previewCanvas.height = trueBoxHeight;
                 
                 ctx.drawImage(
                     sharedScreen,
                     trueX,
                     trueY,
-                    trueWidth,
-                    trueHeight,
+                    trueBoxWidth,
+                    trueBoxHeight,
                     0,
                     0,
                     previewCanvas.width,
