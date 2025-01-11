@@ -1,58 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Screen Share with True Pixel Crop</title>
+    <title>Screen Share with Resizable Crop</title>
     <style>
-        /* Previous styles remain the same */
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f0f0f0;
-        }
-
-        .container {
-            display: flex;
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        .main-screen {
-            flex: 2;
-        }
-
-        .preview-pane {
-            flex: 1;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .screen-container {
-            position: relative;
-            margin: 20px 0;
-            display: inline-block;
-            background: #fff;
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        #sharedScreen {
-            max-width: 100%;
-            display: none;
-            border-radius: 4px;
-        }
-        
-        .crop-overlay {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            bottom: 10px;
-            display: none;
-        }
-        
+        /* Previous general styles remain the same */
         .crop-box {
             position: absolute;
             border: 2px solid red;
@@ -60,88 +11,94 @@
             cursor: move;
         }
 
-        #dimensions {
-            margin: 10px 0;
-            font-family: monospace;
-            background: #fff;
-            padding: 10px;
-            border-radius: 4px;
+        .resize-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: red;
+            border-radius: 50%;
         }
-        
-        /* Rest of the styles remain the same */
+
+        .resize-handle.top-left {
+            top: -5px;
+            left: -5px;
+            cursor: nw-resize;
+        }
+
+        .resize-handle.bottom-right {
+            bottom: -5px;
+            right: -5px;
+            cursor: se-resize;
+        }
+
+        .crop-dimensions {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        /* Make preview canvas responsive */
+        #previewCanvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .preview-pane {
+            min-width: 300px;
+        }
     </style>
 </head>
 <body>
-    <h1>Screen Share with True Pixel Crop</h1>
-    
-    <div id="status">Ready to share</div>
-    <div id="dimensions">Resolution: Not sharing</div>
-    
-    <div class="controls">
-        <button id="shareButton">Start Screen Share</button>
-        <button id="stopButton" style="display: none;">Stop Sharing</button>
-    </div>
-
-    <div class="container">
-        <div class="main-screen">
-            <div class="screen-container">
-                <video id="sharedScreen" autoplay playsinline></video>
-                <div class="crop-overlay">
-                    <div class="crop-box"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="preview-pane">
-            <div class="preview-title">Live Preview (512x512)</div>
-            <canvas id="previewCanvas" width="512" height="512"></canvas>
-        </div>
+    <!-- Previous HTML structure remains the same until crop-box -->
+    <div class="crop-box">
+        <div class="resize-handle top-left"></div>
+        <div class="resize-handle bottom-right"></div>
+        <div class="crop-dimensions"></div>
     </div>
 
     <script>
         let stream = null;
         let trueWidth = 0;
         let trueHeight = 0;
+        let isResizing = false;
+        let currentHandle = null;
+        let cropWidth = 512;
+        let cropHeight = 512;
         
-        const shareButton = document.getElementById('shareButton');
-        const stopButton = document.getElementById('stopButton');
-        const sharedScreen = document.getElementById('sharedScreen');
-        const cropOverlay = document.querySelector('.crop-overlay');
-        const cropBox = document.querySelector('.crop-box');
-        const previewCanvas = document.getElementById('previewCanvas');
-        const ctx = previewCanvas.getContext('2d');
-        const statusDiv = document.getElementById('status');
-        const dimensionsDiv = document.getElementById('dimensions');
-
-        function updateStatus(message) {
-            console.log(message);
-            statusDiv.textContent = message;
-        }
-
-        function updateDimensions() {
-            dimensionsDiv.textContent = `Source Resolution: ${trueWidth}x${trueHeight} | Crop: 512x512 | Scale: ${(trueWidth / sharedScreen.offsetWidth).toFixed(2)}x`;
-        }
+        const cropDimensions = document.querySelector('.crop-dimensions');
         
-        // Dragging functionality
-        let isDragging = false;
-        let currentX = 0;
-        let currentY = 0;
-        let initialX;
-        let initialY;
-        
-        cropBox.addEventListener('mousedown', dragStart);
-        document.addEventListener('mousemove', drag);
-        document.addEventListener('mouseup', dragEnd);
-        
-        function dragStart(e) {
-            initialX = e.clientX - currentX;
-            initialY = e.clientY - currentY;
+        // Update dimensions display
+        function updateCropDimensions() {
+            const bounds = sharedScreen.getBoundingClientRect();
+            const scale = trueWidth / bounds.width;
+            const trueCropWidth = Math.round(cropWidth * scale);
+            const trueCropHeight = Math.round(cropHeight * scale);
+            cropDimensions.textContent = `${trueCropWidth}x${trueCropHeight} px`;
             
-            if (e.target === cropBox) {
-                isDragging = true;
-            }
+            // Also update the preview canvas size
+            previewCanvas.width = trueCropWidth;
+            previewCanvas.height = trueCropHeight;
         }
-        
+
+        // Initialize resize handles
+        document.querySelectorAll('.resize-handle').forEach(handle => {
+            handle.addEventListener('mousedown', (e) => {
+                e.stopPropagation(); // Prevent dragging when resizing
+                isResizing = true;
+                currentHandle = handle;
+                initialX = e.clientX;
+                initialY = e.clientY;
+            });
+        });
+
+        // Modified drag function to handle both moving and resizing
         function drag(e) {
             if (isDragging) {
                 e.preventDefault();
@@ -149,36 +106,99 @@
                 const bounds = sharedScreen.getBoundingClientRect();
                 const scale = trueWidth / bounds.width;
                 
-                // Calculate new position in display coordinates
                 let newX = e.clientX - initialX;
                 let newY = e.clientY - initialY;
                 
                 // Convert to true pixels and constrain
-                let trueX = newX * scale;
-                let trueY = newY * scale;
+                let trueX = (currentX + newX) * scale;
+                let trueY = (currentY + newY) * scale;
                 
-                // Constrain to video bounds in true pixels
-                trueX = Math.max(0, Math.min(trueX, trueWidth - 512));
-                trueY = Math.max(0, Math.min(trueY, trueHeight - 512));
+                // Constrain to video bounds
+                trueX = Math.max(0, Math.min(trueX, trueWidth - (cropWidth * scale)));
+                trueY = Math.max(0, Math.min(trueY, trueHeight - (cropHeight * scale)));
                 
                 // Convert back to display coordinates
                 currentX = trueX / scale;
                 currentY = trueY / scale;
                 
                 setTranslate(currentX, currentY, cropBox);
+            } else if (isResizing && currentHandle) {
+                e.preventDefault();
+                
+                const bounds = sharedScreen.getBoundingClientRect();
+                const scale = trueWidth / bounds.width;
+                const box = cropBox.getBoundingClientRect();
+                
+                if (currentHandle.classList.contains('top-left')) {
+                    const dx = e.clientX - initialX;
+                    const dy = e.clientY - initialY;
+                    
+                    const newWidth = box.width - dx;
+                    const newHeight = box.height - dy;
+                    
+                    if (newWidth >= 50 && newHeight >= 50) {
+                        cropWidth = newWidth;
+                        cropHeight = newHeight;
+                        currentX += dx;
+                        currentY += dy;
+                        initialX = e.clientX;
+                        initialY = e.clientY;
+                    }
+                } else if (currentHandle.classList.contains('bottom-right')) {
+                    const dx = e.clientX - initialX;
+                    const dy = e.clientY - initialY;
+                    
+                    const newWidth = box.width + dx;
+                    const newHeight = box.height + dy;
+                    
+                    if (newWidth >= 50 && newHeight >= 50) {
+                        cropWidth = newWidth;
+                        cropHeight = newHeight;
+                        initialX = e.clientX;
+                        initialY = e.clientY;
+                    }
+                }
+                
+                cropBox.style.width = `${cropWidth}px`;
+                cropBox.style.height = `${cropHeight}px`;
+                setTranslate(currentX, currentY, cropBox);
+                updateCropDimensions();
             }
         }
-        
-        function setTranslate(xPos, yPos, el) {
-            el.style.transform = `translate(${xPos}px, ${yPos}px)`;
+
+        // Modified updatePreview function to handle variable dimensions
+        function updatePreview() {
+            if (!stream) return;
+            
+            try {
+                const bounds = sharedScreen.getBoundingClientRect();
+                const scale = trueWidth / bounds.width;
+                
+                // Calculate true pixel coordinates
+                const trueX = currentX * scale;
+                const trueY = currentY * scale;
+                const trueCropWidth = cropWidth * scale;
+                const trueCropHeight = cropHeight * scale;
+                
+                ctx.drawImage(
+                    sharedScreen,
+                    trueX,
+                    trueY,
+                    trueCropWidth,
+                    trueCropHeight,
+                    0,
+                    0,
+                    previewCanvas.width,
+                    previewCanvas.height
+                );
+                
+                requestAnimationFrame(updatePreview);
+            } catch (error) {
+                console.error('Error in updatePreview:', error);
+            }
         }
-        
-        function dragEnd(e) {
-            initialX = currentX;
-            initialY = currentY;
-            isDragging = false;
-        }
-        
+
+        // Modified startScreenShare function
         async function startScreenShare() {
             updateStatus('Requesting screen share permissions...');
             try {
@@ -196,7 +216,7 @@
                 
                 sharedScreen.srcObject = stream;
                 
-                // Wait for video metadata to load to get true dimensions
+                // Wait for video metadata to load
                 await new Promise(resolve => {
                     sharedScreen.onloadedmetadata = () => {
                         trueWidth = sharedScreen.videoWidth;
@@ -207,24 +227,28 @@
 
                 await sharedScreen.play();
                 
-                updateStatus('Screen share active - Drag the red box to select area');
+                updateStatus('Screen share active - Drag corners to resize, drag center to move');
                 updateDimensions();
                 
-                // Set crop box size based on scale
+                // Set initial crop box size and position
                 const bounds = sharedScreen.getBoundingClientRect();
                 const scale = trueWidth / bounds.width;
-                cropBox.style.width = `${512 / scale}px`;
-                cropBox.style.height = `${512 / scale}px`;
+                cropWidth = 512 / scale;
+                cropHeight = 512 / scale;
+                cropBox.style.width = `${cropWidth}px`;
+                cropBox.style.height = `${cropHeight}px`;
                 
                 sharedScreen.style.display = 'block';
                 cropOverlay.style.display = 'block';
                 shareButton.style.display = 'none';
                 stopButton.style.display = 'inline-block';
                 
-                // Set initial crop box position
-                currentX = (bounds.width - (512 / scale)) / 2;
-                currentY = (bounds.height - (512 / scale)) / 2;
+                // Set initial position
+                currentX = (bounds.width - cropWidth) / 2;
+                currentY = (bounds.height - cropHeight) / 2;
                 setTranslate(currentX, currentY, cropBox);
+                
+                updateCropDimensions();
                 
                 stream.getVideoTracks()[0].addEventListener('ended', () => {
                     updateStatus('Screen share stopped by user');
@@ -239,54 +263,12 @@
                 stopSharing();
             }
         }
-        
-        function stopSharing() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
-            sharedScreen.srcObject = null;
-            sharedScreen.style.display = 'none';
-            cropOverlay.style.display = 'none';
-            shareButton.style.display = 'inline-block';
-            stopButton.style.display = 'none';
-            updateStatus('Screen share stopped');
-            dimensionsDiv.textContent = 'Resolution: Not sharing';
-            
-            // Clear the preview
-            ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-        }
-        
-        function updatePreview() {
-            if (!stream) return;
-            
-            try {
-                const bounds = sharedScreen.getBoundingClientRect();
-                const scale = trueWidth / bounds.width;
-                
-                // Calculate true pixel coordinates
-                const trueX = currentX * scale;
-                const trueY = currentY * scale;
-                
-                ctx.drawImage(
-                    sharedScreen,
-                    trueX,
-                    trueY,
-                    512,
-                    512,
-                    0,
-                    0,
-                    512,
-                    512
-                );
-                
-                requestAnimationFrame(updatePreview);
-            } catch (error) {
-                console.error('Error in updatePreview:', error);
-            }
-        }
-        
-        shareButton.addEventListener('click', startScreenShare);
-        stopButton.addEventListener('click', stopSharing);
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            isResizing = false;
+            currentHandle = null;
+        });
     </script>
 </body>
 </html>
