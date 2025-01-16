@@ -1,9 +1,7 @@
 from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO
 from process_region import save_screenshot
 
 app = Flask(__name__)
-socketio = SocketIO(app)
 
 @app.route('/')
 def index():
@@ -16,4 +14,4 @@ def handle_screenshot():
     return jsonify(result)
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    app.run(debug=True)
