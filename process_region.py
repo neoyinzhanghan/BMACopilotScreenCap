@@ -1,11 +1,9 @@
 import os
-import io
-import time
 import base64
-import boto3
-from PIL import Image
+import time
 from datetime import datetime
 import pytz
+import boto3
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -26,15 +24,9 @@ subdirectory = f"saved_copilot_regions-{current_time.strftime('%Y%m%d-%H%M%S')}"
 
 def save_screenshot(base64_image):
     try:
-        # Decode base64 image
+        # Decode base64 image directly to bytes
         image_data = base64.b64decode(base64_image.split(',')[1])
-        image = Image.open(io.BytesIO(image_data))
         
-        # Convert image to bytes
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG')
-        img_byte_arr = img_byte_arr.getvalue()
-
         # Generate filename with timestamp
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         filename = f"{subdirectory}/screenshot_{timestamp}.jpg"
@@ -43,7 +35,7 @@ def save_screenshot(base64_image):
         s3_client.put_object(
             Bucket=os.getenv('S3_BUCKET'),
             Key=filename,
-            Body=img_byte_arr,
+            Body=image_data,
             ContentType='image/jpeg'
         )
         
