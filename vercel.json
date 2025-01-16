@@ -8,7 +8,7 @@
         "maxLambdaSize": "15mb",
         "runtime": "python3.9",
         "includedFiles": ["**/*.py"],
-        "installCommand": "apt-get update && apt-get install -y libjpeg-dev zlib1g-dev && pip install -r requirements.txt"
+        "installCommand": "apt-get update && apt-get install -y libjpeg62-turbo-dev zlib1g-dev && pip install -r requirements.txt"
       }
     }
   ],
