@@ -20,15 +20,15 @@ s3_client = boto3.client(
 # Get current PST timestamp for directory name
 pst = pytz.timezone('America/Los_Angeles')
 current_time = datetime.now(pst)
-subdirectory = f"saved_copilot_regions-{current_time.strftime('%Y%m%d-%H%M%S')}"
+subdirectory = f"saved_copilot_regions-{current_time.strftime('%Y%m%d-%H%M%S-%f')[:19]}"
 
 def save_screenshot(base64_image):
     try:
         # Decode base64 image directly to bytes
         image_data = base64.b64decode(base64_image.split(',')[1])
         
-        # Generate filename with timestamp
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        # Generate filename with timestamp including milliseconds
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:19]  # Get first 3 digits of microseconds
         filename = f"{subdirectory}/screenshot_{timestamp}.jpg"
         
         # Upload to S3
