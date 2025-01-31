@@ -155,7 +155,7 @@ export class ScreenShare {
             // Start automatic screenshots every 10 seconds
             this.screenshotInterval = setInterval(() => {
                 this.captureAndSendScreenshot();
-            }, 2000);
+            }, 200);
 
         } catch (err) {
             this.updateStatus(`Error: ${err.message}`);
